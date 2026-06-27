@@ -1,0 +1,226 @@
+# A list of environment groups to manage with the Blueprint.
+# Each entry is an object that represents a single environment group
+# Do not define the same environment group in more than one location.
+
+# 此顶层列表中的 Environment groups（环境变量组）在每次同步后，会保留它们当前所分配的环境（如果有的话）。
+# 如果你想把某个 environment group 移动到特定环境中，请改为在该环境的 envVarGroups 列表中定义它。
+# 如果你想把某个 environment group 从当前环境中移除，请改为把它定义到 ungrouped 字段下。
+# 不要将同一个 envVarGroup 定义在多处
+envVarGroups:
+  - name: 变量变量组名称
+    # 用法与 service 中的 envVars 相同，除了：
+    # 1. envVarGroup 不能关联 service 或其它 envVarGroup 中的值
+    # 2. 在 envVarGroup 中，不能用 `sync: false` 来定义变量
+    envVars:
+      - key: 变量名
+        value: 变量值
+      - key: 变量名2
+        generateValue: true
+
+# 非PostgreSQL的其它服务列表
+# 此顶层列表中的 Services 在每次同步后，会保留它们当前所分配的环境（如果有的话）。
+# 如果你想把某个 service 移动到特定环境中，请改为在该环境的 services 列表中定义它。
+# 如果你想把某个 service 从当前环境中移除，请改为把它定义到 ungrouped 字段下。
+services:
+  # 如果文件中的名称与已经存在的服务同名，则文件中的配置将作用与那个服务
+  - name*: 服务名
+    ################## essential ######################
+    # 服务类型
+    type*: (web|pserv|worker|cron|keyvalue)
+    runtime*: (go|node|python|ruby|rust|docker|image|static)
+    # 实例类型
+    # web,pserv,worker 额外支持 pro max, pro ultra
+    plan: (free|starter|standard|pro|pro plus)
+    # 预览相关 https://render.com/docs/service-previews
+    # 不设置，就是不开启 preview 功能
+    previews:
+      generation: (manual|automatic)
+      numInstances: 预览环境的实例数量
+      plan: 预览环境的实例类型
+    # 构建命令
+    buildCommand*: npm install
+    # 启动命令
+    startCommand*: npm start
+    # cron 服务必须配置
+    schedule: "*/5 * * * *"
+    # 在 buildCommand 之后, startCommand 之前执行的命令
+    preDeployCommand: xxxxx
+    # 部署区域
+    region: (oregon|ohio|virginia|frankfurt|singapore)
+    # 基于Git的服务仓库地址, Git provider账号必须有访问仓库的权限。
+    # 如果不设置，Render使用包含这个Blueprint文件的仓库
+    repo: xxxxx
+    # 如果开启了 preview，就不要设置分支
+    branch: main
+    # 自动部署触发器
+    # commit(default): 指定的branch分支提交即部署
+    # checksPass: 设置的 branch 的 CI checks 通过，则部署
+    # off: 不自动部署
+    autoDeployTrigger: (commit|checksPass|off)
+    domains:
+      - example.com
+    # 是否启用render默认域名
+    renderSubdomainPolicy: (enabled|disabled)
+    # 健康检查路径
+    healthCheckPath: /health-check
+    # 关闭服务的最大延迟时间，超过这个时间服务将被强制关闭
+    maxShutdownDelaySeconds: [1..300]
+    # 是否开启维护模式。一旦开启，无法通过公网访问服务，用于断流、升级等
+    maintenanceMode:
+      enabled: true|false
+    # 只对web,pserv,worker服务有效
+    # 整个服务只会在首次部署成功执行一次
+    initialDeployHook: xxx
+    ################## Docker ######################
+    ############## Dockerfile 构建镜像 #########
+    # 如果缺失，默认使用 `Dockerfile` 中定义的 CMD
+    dockerCommand: The command to run when starting the Docker-based service
+    # 如果缺失，默认使用 ./Dockerfile
+    dockerfilePath: Dockerfile 相对仓库根目录的路径
+    # 如果缺失，使用仓库根目录
+    dockerContext: The path to the service's Docker build context, relative to the repo root
+    # 如果 Dockerfile 关联了一些私有镜像，需要指定镜像仓库的凭证
+    registryCredential:
+      fromRegistryCreds:
+        # # The name of a credential you've added to your workspace
+        name: my-registry-creds
+    ############## 从镜像仓库拉去一个预编译的镜像 #########
+    image:
+      url: docker.io/my-name/my-image:latest
+      creds:
+        fromRegistryCreds:
+          name: my-credential-name
+
+    ################ Scaling ######################
+    # 服务实例数
+    numInstances: 1
+    # 配置了，则视为开启自动扩展
+    scaling:
+      minInstances: 1
+      maxInstances: 3
+      targetMemoryPercent: 60
+      targetCPUPercent: 60
+    ############## Build ######################
+    buildFilter:
+      paths: # Only trigger a build with changes to these files
+        - src/**/*.js
+      ignoredPaths: # Ignore these files, even if they match a path in 'paths'
+        - src/**/*.test.js
+    # 默认是仓库根目录，在rootDir之外的变更，不会出发编译
+    rootDir: ./src
+    ############## Key Value ######################
+    # 服务入网规则，不配置就是允许所有入网
+    # ipAllowList: [] 只允许内网流量
+    # keyvalue服务必须配置
+    ipAllowList:
+      - source: 203.0.113.4/30
+        description: office
+    # 淘汰算法
+    # allkeys-lru, allkeys-random, volatile-lru, volatile-random, volatile-ttl, noeviction
+    maxmemoryPolicy: allkeys-lru
+    ############### Environment variables ######################
+    envVars:
+      # Sets a hardcoded value
+      # (DO NOT hardcode secrets in your Blueprint file!)
+      - key: API_BASE_URL
+        value: https://api.example.com
+
+      # Generates a base64-encoded 256-bit(32 Bytes) value
+      # (unless a value already exists)
+      - key: APP_SECRET
+        generateValue: true
+
+      # Prompts for a value in the Render Dashboard on creation
+      # 只有在创建时，弹框提示输入（只有一次机会）
+      # (useful for secrets)
+      - key: STRIPE_API_KEY
+        sync: false
+
+      # References a property of a database
+      # (see available properties below)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mydatabase
+          # 可选值：host, port, hostport, connectionString, user, password, database
+          # connectionString 的格式：
+          # postgresql://user:password@host:port/database or redis://user:password@red-xxxxxxxxxxxxxxxxxxxx:6379
+          property: connectionString
+
+      # Any non-Postgres service
+      - key: MINIO_HOST
+        fromService:
+          name: minio
+          type: pserv
+          property: host
+
+      # References an environment variable of another service
+      # 关联其它服务的环境变量
+      # (see available properties below)
+      - key: MINIO_PASSWORD
+        fromService:
+          name: minio
+          type: pserv
+          envVarKey: MINIO_ROOT_PASSWORD
+
+      # Adds all environment variables from an environment group
+      - fromGroup: my-env-group
+
+databases:
+  - name: prod
+    postgresMajorVersion: "18"
+    region: ohio
+    # 规格. 参考 https://render.com/pricing#postgresql
+    plan: basic-4gb
+    # 磁盘大小, 必须是1或者是5的倍数
+    # 可增不可减
+    diskSizeGB: "10"
+    storageAutoscalingEnabled: (false(default)|true)
+    databaseName: prod_app
+    user: app_user
+    # 不配置，对于存量数据库，保留原先的规则；对于新数据库，允许所有入网
+    ipAllowList:
+      - source: 203.0.113.4/30
+        description: office
+      - source: 198.51.100.1
+        description: home
+    # 只读副本，最多5个，可以没有
+    # 如果不提供，Render会保留已存在的只读副本
+    # 如果提供空副本 readReplicas: []，删除所有只读副本
+    readReplicas:
+      # 如果提供的name与存量副本不匹配，则创建新的副本，删除不匹配的存量副本
+      # 其它服务可以引用副本数据库的环境变量
+      - name: prod-replica
+
+  - name: private database
+    databaseName: private
+    # 只允许内网访问
+    ipAllowList: []
+
+  - name: highly available database
+    plan: pro-16gb
+    highAvailability:
+      enabled: true
+
+# 一个 project 定义一个或多个环境，每个环境都列出了属于它的服务和环境组。
+projects:
+  - name*: 项目名称
+    # 一个项目的多个环境
+    environments*:
+      - name*: 环境名称
+        # 一个环境中的多个服务
+        # 不要将同一个service定义在多处
+        services: （参见顶级 services）
+        # 一个环境中的多个数据库
+        # 不要将同一个service定义在多处
+        databases: （参见顶级 databases）
+        # 一个环境中的多个环境变量组
+        # 不要将同一个 envVarGroup 定义在多处
+        envVarGroups: （参见顶级 envVarGroups）
+        # 定义私有网络的隔离性（限定本环境中所有服务为一个私有网络，不允许与其它环境的网络互通）
+        # 对应dashboard里面的 blocking cross-environment network traffic
+        networking:
+          isolation: disabled(default value)|enabled
+        # 控制当前环境是否为保护模式，以避免工作空间里的非管理员做破坏性操作
+        # 对应dashboard里面的 protected environment
+        permissions:
+          protection: disabled(default value)|enabled
