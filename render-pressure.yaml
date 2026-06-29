@@ -1,0 +1,93 @@
+# Exported from Render on 2026-06-27T07:13:29Z
+version: "1"
+projects:
+  - name: My project
+    environments:
+      - name: Pressure
+        envVarGroups:
+          - name: EvnGroup-Pressure
+            envVars:
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: database-pressure
+                  property: connectionString
+              - key: DB_HOST
+                fromDatabase:
+                  name: database-pressure
+                  property: host
+              - key: REDIS_URL
+                fromService::
+                  name: toms-kv-pressure
+                  type: keyvalue
+                  property: connectionString
+        networking:
+          isolation: enabled
+        databases:
+          - name: database-pressure
+            databaseName: toms_na_pressure
+            user: toms
+            plan: Basic-4gb
+            region: ohio
+            ipAllowList:
+              - source: 0.0.0.0/0
+                description: everywhere
+            postgresMajorVersion: "17"
+            diskSizeGB: 50
+            storageAutoscalingEnabled: true
+        services:
+          - type: web
+            name: device-api2-pressure
+            runtime: go
+            repo: https://github.com/Newland-Payment-Technology-US-Co-Ltd/pep-posp
+            branch: feature/device-api2
+            plan: pro
+            envVars:
+              - fromGroup: EvnGroup-Pressure
+            region: ohio
+            buildCommand: go build -o app composites-server/full/main.go
+            startCommand: ./app
+            autoDeployTrigger: commit
+          - type: web
+            name: client-pressure
+            runtime: go
+            repo: https://github.com/Newland-Payment-Technology-US-Co-Ltd/mail-copilot
+            plan: pro
+            envVars:
+              - fromGroup: EvnGroup-Pressure
+            region: ohio
+            buildCommand: go build -o mail-copilot ./cmd/mail-copilot
+            startCommand: ./mail-copilot
+            autoDeployTrigger: commit
+          - type: pserv
+            name: pgbouncer-pressure
+            runtime: docker
+            repo: https://github.com/edoburu/docker-pgbouncer
+            plan: standard
+            envVars:
+              - key: POOL_MODE
+                value: transaction
+              - key: SERVER_RESET_QUERY
+                value: DISCARD ALL
+              - key: MAX_CLIENT_CONN
+                value: 100
+              - key: MAX_PREPARED_STATEMENTS
+                value: 200
+              - key: DEFAULT_POOL_SIZE
+                value: 50
+              - key: ADMIN_USERS
+                fromDatabase:
+                  name: database-pressure
+                  property: user
+              - fromGroup: EvnGroup-Pressure
+            region: ohio
+            dockerContext: .
+            dockerfilePath: ./Dockerfile
+            autoDeployTrigger: "off"
+          - type: keyvalue
+            name: toms-kv-pressure
+            plan: starter
+            region: ohio
+            maxmemoryPolicy: allkeys-lru
+            persistenceMode: journal-snapshot
+            ipAllowList: []
+
